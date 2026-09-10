@@ -1,16 +1,22 @@
 /**
- * Ein Handyfoto ist schnell 4 MB groß. Bei 30 Gästen wäre der Speicher
- * voll und jeder Upload im vollen WLAN eine Geduldsprobe. Deshalb
- * rechnen wir vor dem Hochladen im Browser runter: lange Kante auf
- * 1600px, JPEG mit Qualität 0.82. Das landet meist bei 200-400 KB und
- * sieht auf jedem Display noch gut aus.
+ * Aus einem Handyfoto werden zwei Dateien:
+ *
+ *   full  — lange Kante 1600px, für die Vollbildansicht
+ *   thumb — lange Kante 400px, für das Raster
+ *
+ * Der Grund ist Egress, nicht Speicherplatz. Das Raster zeigt bei
+ * 60 Gästen tausende Bildaufrufe. Mit den Vollbildern wären das
+ * mehrere Gigabyte, mit Thumbnails ein Bruchteil davon.
  */
 
-const MAX_EDGE = 1600;
-const QUALITY = 0.82;
+const FULL_EDGE = 1600;
+const THUMB_EDGE = 400;
+const FULL_QUALITY = 0.82;
+const THUMB_QUALITY = 0.7;
 
 export type Prepared = {
-  blob: Blob;
+  full: Blob;
+  thumb: Blob | null;
   extension: string;
 };
 
@@ -24,33 +30,36 @@ export async function shrinkImage(file: File): Promise<Prepared> {
     // Manche Formate (z.B. HEIC auf Nicht-Apple-Geräten) lassen sich
     // nicht dekodieren. Dann laden wir das Original hoch, statt den
     // Upload ganz scheitern zu lassen.
-    return { blob: file, extension: extensionOf(file) };
+    return { full: file, thumb: null, extension: extensionOf(file) };
   }
 
-  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    bitmap.close();
-    return { blob: file, extension: extensionOf(file) };
-  }
-
-  ctx.drawImage(bitmap, 0, 0, width, height);
+  const full = await render(bitmap, FULL_EDGE, FULL_QUALITY);
+  const thumb = await render(bitmap, THUMB_EDGE, THUMB_QUALITY);
   bitmap.close();
 
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", QUALITY),
+  if (!full) return { full: file, thumb: null, extension: extensionOf(file) };
+
+  return { full, thumb, extension: "jpg" };
+}
+
+async function render(
+  bitmap: ImageBitmap,
+  maxEdge: number,
+  quality: number,
+): Promise<Blob | null> {
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+  return new Promise((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", quality),
   );
-
-  if (!blob) return { blob: file, extension: extensionOf(file) };
-
-  return { blob, extension: "jpg" };
 }
 
 function extensionOf(file: File): string {

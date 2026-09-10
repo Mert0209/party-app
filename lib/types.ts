@@ -22,6 +22,7 @@ export type SongVote = {
 export type Photo = {
   id: string;
   storage_path: string;
+  thumb_path: string | null;
   caption: string | null;
   uploaded_by: string;
   guest_id: string;

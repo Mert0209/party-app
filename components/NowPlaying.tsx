@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useGuest } from "@/lib/guest";
+import { useLiveReload } from "@/lib/live";
 import type { Song } from "@/lib/types";
 
 type Tally = { up: number; down: number; mine: -1 | 1 | null };
@@ -50,6 +51,11 @@ export default function NowPlaying() {
     [],
   );
 
+  const scheduleSong = useLiveReload(loadSong);
+  const scheduleVotes = useLiveReload(() => {
+    if (song && guest) loadVotes(song.id, guest.id);
+  });
+
   // Welcher Song läuft?
   useEffect(() => {
     loadSong();
@@ -59,14 +65,14 @@ export default function NowPlaying() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "songs" },
-        () => loadSong(),
+        () => scheduleSong(),
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadSong]);
+  }, [loadSong, scheduleSong]);
 
   // Stimmen zum laufenden Song.
   useEffect(() => {
@@ -87,14 +93,14 @@ export default function NowPlaying() {
           table: "song_votes",
           filter: `song_id=eq.${song.id}`,
         },
-        () => loadVotes(song.id, guest.id),
+        () => scheduleVotes(),
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [song, guest, loadVotes]);
+  }, [song, guest, loadVotes, scheduleVotes]);
 
   async function vote(value: -1 | 1) {
     if (!song || !guest) return;

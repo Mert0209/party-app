@@ -12,11 +12,12 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Nicht angemeldet" }, { status: 401 });
   }
 
-  const { id, storagePath } = await request.json();
+  const { id, storagePath, thumbPath } = await request.json();
 
-  const removed = await supabaseAdmin.storage
-    .from("photos")
-    .remove([storagePath]);
+  // Beide Dateien wegräumen, sonst bleibt das Thumbnail im Bucket.
+  const paths = [storagePath, thumbPath].filter(Boolean) as string[];
+
+  const removed = await supabaseAdmin.storage.from("photos").remove(paths);
 
   if (removed.error) {
     return NextResponse.json({ error: removed.error.message }, { status: 500 });

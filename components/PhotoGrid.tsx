@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useLiveReload } from "@/lib/live";
 import type { Photo } from "@/lib/types";
 
-type Item = Photo & { url: string };
+type Item = Photo & { url: string; thumbUrl: string };
 
 export default function PhotoGrid() {
   const [items, setItems] = useState<Item[]>([]);
@@ -23,12 +24,15 @@ export default function PhotoGrid() {
         ...photo,
         // Bucket ist öffentlich, also reicht die statische URL —
         // keine signierten Links, die nach einer Stunde ablaufen.
-        url: supabase.storage.from("photos").getPublicUrl(photo.storage_path)
-          .data.publicUrl,
+        url: publicUrl(photo.storage_path),
+        // Ältere Uploads haben noch kein Thumbnail: dann das Grosse.
+        thumbUrl: publicUrl(photo.thumb_path ?? photo.storage_path),
       })),
     );
     setLoading(false);
   }, []);
+
+  const scheduleReload = useLiveReload(load);
 
   useEffect(() => {
     load();
@@ -38,14 +42,14 @@ export default function PhotoGrid() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "photos" },
-        () => load(),
+        () => scheduleReload(),
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [load]);
+  }, [load, scheduleReload]);
 
   // Zurück-Taste schließt das Vollbild, statt die Seite zu verlassen.
   useEffect(() => {
@@ -88,9 +92,10 @@ export default function PhotoGrid() {
                 Supabase, sind schon klein, und so sparen wir uns die
                 Domain-Konfiguration und den Optimierungs-Umweg. */}
             <img
-              src={item.url}
+              src={item.thumbUrl}
               alt={`Foto von ${item.uploaded_by}`}
               loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover"
             />
           </button>
@@ -118,4 +123,8 @@ export default function PhotoGrid() {
       )}
     </>
   );
+}
+
+function publicUrl(path: string): string {
+  return supabase.storage.from("photos").getPublicUrl(path).data.publicUrl;
 }

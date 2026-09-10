@@ -26,20 +26,31 @@ export default function PhotoUpload() {
     // fünf gleichzeitige Uploads seltener durch als fünf hintereinander.
     for (const [index, file] of list.entries()) {
       try {
-        const { blob, extension } = await shrinkImage(file);
+        const { full, thumb, extension } = await shrinkImage(file);
 
         // Pfad mit Gast-ID vorne: so kollidieren zwei Leute nie,
         // die gleichzeitig "IMG_1234.jpg" hochladen.
-        const path = `${guest.id}/${Date.now()}-${index}.${extension}`;
+        const base = `${guest.id}/${Date.now()}-${index}`;
+        const path = `${base}.${extension}`;
+        const thumbPath = thumb ? `${base}-thumb.jpg` : null;
 
         const upload = await supabase.storage
           .from("photos")
-          .upload(path, blob, { contentType: blob.type || "image/jpeg" });
+          .upload(path, full, { contentType: full.type || "image/jpeg" });
 
         if (upload.error) throw upload.error;
 
+        if (thumb && thumbPath) {
+          // Scheitert das Thumbnail, ist das kein Grund zum Abbruch —
+          // die Galerie faellt dann auf das grosse Bild zurueck.
+          await supabase.storage
+            .from("photos")
+            .upload(thumbPath, thumb, { contentType: "image/jpeg" });
+        }
+
         const insert = await supabase.from("photos").insert({
           storage_path: path,
+          thumb_path: thumbPath,
           uploaded_by: guest.name,
           guest_id: guest.id,
         });

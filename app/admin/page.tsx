@@ -217,7 +217,11 @@ function PhotoControl() {
     await fetch("/api/admin/photo", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: photo.id, storagePath: photo.storage_path }),
+      body: JSON.stringify({
+        id: photo.id,
+        storagePath: photo.storage_path,
+        thumbPath: photo.thumb_path,
+      }),
     });
     setConfirming(null);
     load();
@@ -232,7 +236,7 @@ function PhotoControl() {
       {photos.map((photo) => {
         const url = supabase.storage
           .from("photos")
-          .getPublicUrl(photo.storage_path).data.publicUrl;
+          .getPublicUrl(photo.thumb_path ?? photo.storage_path).data.publicUrl;
 
         return (
           <div key={photo.id} className="relative aspect-square">

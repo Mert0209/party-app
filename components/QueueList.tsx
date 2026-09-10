@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useGuest } from "@/lib/guest";
+import { useLiveReload } from "@/lib/live";
 import type { Song } from "@/lib/types";
 
 type Row = Song & { votes: number; voted: boolean };
@@ -48,6 +49,10 @@ export default function QueueList() {
     setLoading(false);
   }, []);
 
+  const scheduleReload = useLiveReload(() => {
+    if (guest) load(guest.id);
+  });
+
   useEffect(() => {
     if (!guest) return;
 
@@ -58,19 +63,19 @@ export default function QueueList() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "songs" },
-        () => load(guest.id),
+        () => scheduleReload(),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "song_votes" },
-        () => load(guest.id),
+        () => scheduleReload(),
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [guest, load]);
+  }, [guest, load, scheduleReload]);
 
   async function toggleVote(row: Row) {
     if (!guest) return;
