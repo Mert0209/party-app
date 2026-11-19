@@ -65,6 +65,7 @@ create index song_votes_song_idx on public.song_votes (song_id, phase);
 create table public.photos (
   id            uuid primary key default gen_random_uuid(),
   storage_path  text not null unique,
+  thumb_path    text unique,
   caption       text check (char_length(caption) <= 140),
   uploaded_by   text not null check (char_length(uploaded_by) between 1 and 40),
   guest_id      uuid not null,
